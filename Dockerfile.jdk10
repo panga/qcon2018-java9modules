@@ -1,0 +1,8 @@
+FROM panga/openjdk10:jre-alpine
+
+ADD spring-petclinic-2.0.1.jar /opt/app/
+
+ARG JVM_OPTS
+ENV JVM_OPTS=${JVM_OPTS}
+
+CMD exec java ${JVM_OPTS} --add-modules java.xml.bind -jar /opt/app/spring-petclinic-2.0.1.jar

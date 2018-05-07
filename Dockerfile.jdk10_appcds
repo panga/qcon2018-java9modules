@@ -1,0 +1,13 @@
+FROM panga/openjdk10:jre-alpine
+
+ADD modules /opt/app/modules
+ADD upgrade-modules /opt/app/upgrade-modules
+ADD app.jsa /opt/app
+
+ARG JVM_OPTS
+ENV JVM_OPTS=${JVM_OPTS}
+
+CMD exec java ${JVM_OPTS} --add-modules java.xml.bind \
+    -Xshare:on -XX:+UseAppCDS -XX:SharedArchiveFile=/opt/app/app.jsa \
+    -cp "/opt/app/modules/*:/opt/app/upgrade-modules/*" \
+    org.springframework.samples.petclinic.PetClinicApplication
