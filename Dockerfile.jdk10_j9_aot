@@ -1,0 +1,49 @@
+FROM adoptopenjdk/openjdk10-openj9:alpine-nightly as builder
+
+RUN /opt/java/openjdk/jdk-10.0.1+10/bin/jlink \
+    --module-path /opt/java/openjdk/jdk-10.0.1+10/jmods \
+    --add-modules java.sql,java.naming,java.management,java.instrument,java.xml.bind,openj9.sharedclasses \
+    --verbose \
+    --strip-debug \
+    --compress 2 \
+    --no-header-files \
+    --no-man-pages \
+    --output /opt/jre-minimal
+
+FROM alpine:3.7
+
+RUN apk --update add --no-cache ca-certificates curl openssl binutils xz \
+    && GLIBC_VER="2.25-r0" \
+    && ALPINE_GLIBC_REPO="https://github.com/sgerrand/alpine-pkg-glibc/releases/download" \
+    && curl -Ls ${ALPINE_GLIBC_REPO}/${GLIBC_VER}/glibc-${GLIBC_VER}.apk > /tmp/${GLIBC_VER}.apk \
+    && apk add --allow-untrusted /tmp/${GLIBC_VER}.apk \
+    && curl -Ls https://www.archlinux.org/packages/core/x86_64/gcc-libs/download > /tmp/gcc-libs.tar.xz \
+    && mkdir /tmp/gcc \
+    && tar -xf /tmp/gcc-libs.tar.xz -C /tmp/gcc \
+    && mv /tmp/gcc/usr/lib/libgcc* /tmp/gcc/usr/lib/libstdc++* /usr/glibc-compat/lib \
+    && strip /usr/glibc-compat/lib/libgcc_s.so.* /usr/glibc-compat/lib/libstdc++.so* \
+    && curl -Ls https://www.archlinux.org/packages/core/x86_64/zlib/download > /tmp/libz.tar.xz \
+    && mkdir /tmp/libz \
+    && tar -xf /tmp/libz.tar.xz -C /tmp/libz \
+    && mv /tmp/libz/usr/lib/libz.so* /usr/glibc-compat/lib \
+    && apk del binutils \
+    && rm -rf /tmp/${GLIBC_VER}.apk /tmp/gcc /tmp/gcc-libs.tar.xz /tmp/libz /tmp/libz.tar.xz /var/cache/apk/*
+
+COPY --from=builder /opt/jre-minimal /opt/jre-minimal
+
+ENV LANG=C.UTF-8 \
+    JAVA_HOME=/opt/jre-minimal \
+    PATH=${PATH}:/opt/jre-minimal/bin
+
+ADD modules /opt/app/modules
+ADD upgrade-modules /opt/app/upgrade-modules
+
+ARG JVM_OPTS
+ENV JVM_OPTS=${JVM_OPTS}
+
+VOLUME /opt/app/shareclasses
+
+CMD exec java ${JVM_OPTS} --add-modules java.xml.bind \
+    -Xquickstart -Xscmx128m -Xscmaxaot100m -Xshareclasses:cacheDir=/opt/app/shareclasses \
+    -cp "/opt/app/modules/*:/opt/app/upgrade-modules/*" \
+    org.springframework.samples.petclinic.PetClinicApplication
